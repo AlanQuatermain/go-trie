@@ -13,3 +13,13 @@ The structures implemented here use Unicode runes instead of bytes for each item
 The *ValueTrie* structure provides a Trie implementation where each UTF32 rune can be paired with an integer value. This is designed to implement a TeX-style hyphenation trie, where each character in a sequence can be optionally followed by a non-zero value. This value is then used to assess the suitability for placing a hyphen following that character.
 
 For more information on Tries, read "this Wikipedia article":http://en.wikipedia.org/wiki/Trie. For more information on TeX's use of tries for hyphenation, refer to the "original paper by Franklin Mark Liang":http://www.tug.org/docs/liang/liang-thesis.pdf.
+
+h2. Installation
+
+The simplest way to install is using goinstall:
+
+> goinstall "github.com/AlanQuatermain/go-trie"
+
+This will install the package in such a way that it must be imported using the above quoted string as its import statement, i.e. <code>import trie "github.com/AlanQuatermain/go-trie"</code>.
+
+Alternatively you can clone the code directly and install it using <code>make install</code>. This will enable you to import it in your code using just <code>import "trie"</code>.
