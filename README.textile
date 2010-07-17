@@ -1,0 +1,15 @@
+h1=. Trie for Go
+
+p=. Version 1.0 -- 17 July 2010
+
+p=. By "Jim Dovey":mailto:jimdovey@mac.com
+
+h2. Introduction
+
+This project implements a *Trie* structure for the Go programming language, along with a customization of that structure designed for use with TeX-style hyphenation tables (where values need to be stored with each character).
+
+The structures implemented here use Unicode runes instead of bytes for each item in the trie. This means that strings of Japanese kanji characters will use exactly one trie node per character, rather than one per byte of that character's UTF-8 representation. It also makes the trie itself relatively encoding-agnostic, since it will store UTF32 rune values, meaning that inputs can be compared against strings using any valid sequence of UTF-8 bytes which would resolve to the same UTF32 runes.
+
+The *ValueTrie* structure provides a Trie implementation where each UTF32 rune can be paired with an integer value. This is designed to implement a TeX-style hyphenation trie, where each character in a sequence can be optionally followed by a non-zero value. This value is then used to assess the suitability for placing a hyphen following that character.
+
+For more information on Tries, read "this Wikipedia article":http://en.wikipedia.org/wiki/Trie. For more information on TeX's use of tries for hyphenation, refer to the "original paper by Franklin Mark Liang":http://www.tug.org/docs/liang/liang-thesis.pdf.
