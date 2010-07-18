@@ -55,6 +55,16 @@ import (
 
 type IntArray []int
 
+// Apparently IntVector.Iter() doesn't exist on my amd64 Mac Pro, but does on my i386 iMac. Er, what?
+func iterate(p *vector.IntVector) <-chan int {
+	iter := make(chan int, 100)
+	for _, i := range *p {
+		iter <- i
+	}
+	return iter
+}
+
+
 // Creates and returns a new ValueTrie instance.
 func NewValueTrie() *ValueTrie {
 	t := new(ValueTrie)
@@ -94,7 +104,9 @@ func (p *ValueTrie) Add(s string, v *vector.IntVector) {
 	}
 
 	// append the runes to the trie
-	p.addRunes(strings.NewReader(s), v.Iter())
+	iter := iterate(v)
+	p.addRunes(strings.NewReader(s), iter)
+	close(iter)
 }
 
 // Adds a TeX-style hyphenation pattern to the ValueTrie.  Accepts string of the form '.hy2p' for example.
