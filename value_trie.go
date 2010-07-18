@@ -58,9 +58,12 @@ type IntArray []int
 // Apparently IntVector.Iter() doesn't exist on my amd64 Mac Pro, but does on my i386 iMac. Er, what?
 func iterate(p *vector.IntVector) <-chan int {
 	iter := make(chan int, 100)
-	for _, i := range *p {
-		iter <- i
-	}
+	go func() {
+		for _, i := range *p {
+			iter <- i
+		}
+		close(iter)
+	}()
 	return iter
 }
 
