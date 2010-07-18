@@ -51,6 +51,7 @@ import (
 	"container/vector"
 	"utf8"
 	"sort"
+	"unicode"
 )
 
 type IntArray []int
@@ -115,8 +116,8 @@ func (p *ValueTrie) Add(s string, v *vector.IntVector) {
 // Adds a TeX-style hyphenation pattern to the ValueTrie.  Accepts string of the form '.hy2p' for example.
 func (p *ValueTrie) AddPatternString(s string) {
 	iter := make(chan int, 40)
+	// precompute the Unicode rune for the character '0'
 	rune0, _ := utf8.DecodeRune([]byte{'0'})
-	rune9, _ := utf8.DecodeRune([]byte{'9'})
 
 	// spawn a goroutine to spit each character's hyphenation value into the channel
 	go func() {
@@ -124,7 +125,7 @@ func (p *ValueTrie) AddPatternString(s string) {
 
 		// Using the range keyword will give us each Unicode rune.
 		for pos, rune := range s {
-			if rune >= rune0 && rune <= rune9 {
+			if unicode.IsDigit(rune) {
 				// this is a number referring to the previous character, and has
 				// already been handled
 				continue
@@ -133,7 +134,7 @@ func (p *ValueTrie) AddPatternString(s string) {
 			if pos < strLen-1 {
 				// look ahead to see if it's followed by a number
 				next := s[pos+1]
-				if next <= '9' && next >= '0' {
+				if unicode.IsDigit(int(next)) {
 					// next char is the hyphenation value for this char
 					val := int(next - '0')
 					iter <- val
@@ -149,7 +150,7 @@ func (p *ValueTrie) AddPatternString(s string) {
 	}()
 
 	pure := strings.Map(func(rune int) int {
-		if rune >= rune0 && rune <= rune9 {
+		if unicode.IsDigit(rune) {
 			return -1
 		}
 		return rune
