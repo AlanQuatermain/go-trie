@@ -133,10 +133,10 @@ func (p *ValueTrie) AddPatternString(s string) {
 
 			if pos < strLen-1 {
 				// look ahead to see if it's followed by a number
-				next := s[pos+1]
-				if unicode.IsDigit(int(next)) {
+				next := int(s[pos+1])
+				if unicode.IsDigit(next) {
 					// next char is the hyphenation value for this char
-					val := int(next - '0')
+					val := next - rune0
 					iter <- val
 				} else {
 					// hyphenation for this char is an implied zero
