@@ -212,6 +212,31 @@ func (p *ValueTrie) Contains(s string) bool {
 	return p.includes(strings.NewReader(s))
 }
 
+func (p *ValueTrie) getValues(r *strings.Reader, v *vector.IntVector) bool {
+	rune, _, err := r.ReadRune()
+	if err != nil {
+		return p.leaf
+	}
+	
+	child, ok := p.children[rune]
+	if !ok {
+		return false
+	}
+	
+	// append the value for this node
+	v.Push(child.value)
+	return child.getValues(r, v)
+}
+
+// Retrieve the values associated with the given string.
+func (p *ValueTrie) ValuesForString(s string) (v *vector.IntVector, ok bool) {
+	r := strings.NewReader(s)
+	v = new(vector.IntVector)
+	ok = p.getValues(r, v)
+	return
+}
+
+
 // Internal output-building function used by Members()
 func (p *ValueTrie) buildMembers(prefix string, includeValues, includeZeroes bool) *vector.StringVector {
 	strList := new(vector.StringVector)
@@ -262,3 +287,24 @@ func (p *ValueTrie) Size() (sz int) {
 
 	return
 }
+
+// Return the longest substring of `s` found in the trie.
+func (p *ValueTrie) LongestSubstring(s string) (string, *vector.IntVector) {
+	v := new(vector.IntVector)
+	
+	for pos, rune := range s {
+		child, ok := p.children[rune]
+		if !ok {
+			// out of data in the trie -- return what we've got so far
+			return s[0:pos], v
+		}
+	
+		// append the value for this node
+		v.Push(child.value)
+		p = child
+	}
+	
+	// end of the string -- return input string and whatever values we accumulated
+	return s, v
+}
+

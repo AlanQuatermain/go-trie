@@ -156,4 +156,30 @@ func TestValueTrie(t *testing.T) {
 	if longPat.At(0) != fullStr {
 		t.Errorf("value trie should contain full pattern string '%s', but found '%s'", fullStr, longPat.At(0))
 	}
+	
+	values, ok := trie.ValuesForString(`hyphenation`)
+	if !ok {
+		t.Error("No values returned for string 'hyphenation'")
+	}
+	if values.Len() != hyp.Len() {
+		t.Errorf("Values for 'hyphenation' should be %v, but got %v", *hyp, *values)
+	}
+	for i := 0; i < values.Len(); i++ {
+		if values.At(i) != hyp.At(i) {
+			t.Errorf("Values for 'hyphenation' should be %v, but got %v", *hyp, *values)
+		}
+	}
+	
+	sub, values := trie.LongestSubstring(`hyphenationisagreatthing`)
+	if sub != `hyphenation` {
+		t.Errorf("Longest substring of 'hyphenationisagreatthing' should be 'hyphenation'")
+	}
+	if values.Len() != hyp.Len() {
+		t.Errorf("Values for 'hyphenationisagreatthing' should be %v, but got %v", *hyp, *values)
+	}
+	for i := 0; i < values.Len(); i++ {
+		if values.At(i) != hyp.At(i) {
+			t.Errorf("Values for 'hyphenationisagreatthing' should be %v, but got %v", *hyp, *values)
+		}
+	}
 }
