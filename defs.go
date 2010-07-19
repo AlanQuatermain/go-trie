@@ -48,13 +48,15 @@ package trie
 
 // The basic form of a Trie uses runes rather than characters, therefore it works on integer types.
 type Trie struct {
-	leaf     bool
-	children map[int]*Trie
+	leaf     bool          // whether the node is a leaf (the end of an input string).
+	children map[int]*Trie // a map of sub-tries for each child rune value.
 }
 
-// The second form stores a rune:integer pair.  This is used in the implementation of TeX hyphenation pattern tries.
+// The second form stores a rune:integer pair.  This is used in the implementation of TeX hyphenation
+// pattern tries.
 type ValueTrie struct {
-	value    int
-	leaf     bool
-	children map[int]*ValueTrie
+	value       int                // the value for the letter which indexed this node.
+	prefixValue int                // some hyphenation strings *begin* with a numeric value. Le sigh.
+	leaf        bool               // whether the node is a leaf (where an input string ended).
+	children    map[int]*ValueTrie // a map of sub-tries for each child rune value.
 }

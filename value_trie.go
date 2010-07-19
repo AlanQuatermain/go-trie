@@ -68,6 +68,16 @@ func iterate(p *vector.IntVector) <-chan int {
 	return iter
 }
 
+// Determines whether an input string:IntVector pair has a prefix value.
+func hasPrefixValue(s string, v *vector.IntVector) bool {
+	return v.Len() > utf8.RuneCountInString(s)
+}
+
+// Determines whether an input pattern string has a prefix value.
+func patternHasPrefixValue(s string) bool {
+	rune, _ := utf8.DecodeRuneInString(s)
+	return unicode.IsDigit(rune)
+}
 
 // Creates and returns a new ValueTrie instance.
 func NewValueTrie() *ValueTrie {
@@ -79,7 +89,7 @@ func NewValueTrie() *ValueTrie {
 }
 
 // Internal function: adds items to the trie, reading runes from a strings.Reader
-func (p *ValueTrie) addRunes(r *strings.Reader, iter <-chan int) {
+func (p *ValueTrie) addRunes(r *strings.Reader, iter <-chan int, hasPrefix bool) {
 	rune, _, err := r.ReadRune()
 	if err != nil {
 		p.leaf = true
@@ -92,12 +102,16 @@ func (p *ValueTrie) addRunes(r *strings.Reader, iter <-chan int) {
 
 	if n == nil {
 		n = NewValueTrie()
+		if hasPrefix {
+			n.prefixValue = val
+			val = <-iter
+		}
 		n.value = val
 		p.children[rune] = n
 	}
 
 	// recurse to store sub-runes below the new node
-	n.addRunes(r, iter)
+	n.addRunes(r, iter, false) // recursion *never* has a prefix; that's only for the first rune
 }
 
 // Adds a string of Unicode characters/runes and their associated values to the ValueTrie. If the string is already
@@ -109,7 +123,7 @@ func (p *ValueTrie) Add(s string, v *vector.IntVector) {
 
 	// append the runes to the trie
 	iter := iterate(v)
-	p.addRunes(strings.NewReader(s), iter)
+	p.addRunes(strings.NewReader(s), iter, hasPrefixValue(s, v))
 	close(iter)
 }
 
@@ -126,6 +140,11 @@ func (p *ValueTrie) AddPatternString(s string) {
 		// Using the range keyword will give us each Unicode rune.
 		for pos, rune := range s {
 			if unicode.IsDigit(rune) {
+				if pos == 0 {
+					// This is a prefix number
+					iter <- (rune - rune0)
+				}
+
 				// this is a number referring to the previous character, and has
 				// already been handled
 				continue
@@ -156,7 +175,7 @@ func (p *ValueTrie) AddPatternString(s string) {
 		return rune
 	},
 		s)
-	p.addRunes(strings.NewReader(pure), iter)
+	p.addRunes(strings.NewReader(pure), iter, patternHasPrefixValue(s))
 	close(iter)
 }
 
@@ -217,23 +236,26 @@ func (p *ValueTrie) getValues(r *strings.Reader, v *vector.IntVector) bool {
 	if err != nil {
 		return p.leaf
 	}
-	
+
 	child, ok := p.children[rune]
 	if !ok {
 		return false
 	}
 	
 	// append the value for this node
+	if child.prefixValue != 0 {
+		v.Push(child.prefixValue)
+	}
 	v.Push(child.value)
 	return child.getValues(r, v)
 }
 
 // Retrieve the values associated with the given string.
-func (p *ValueTrie) ValuesForString(s string) (v *vector.IntVector, ok bool) {
+func (p *ValueTrie) ValuesForString(s string) (*vector.IntVector, bool) {
 	r := strings.NewReader(s)
-	v = new(vector.IntVector)
-	ok = p.getValues(r, v)
-	return
+	v := new(vector.IntVector)
+	ok := p.getValues(r, v)
+	return v, ok
 }
 
 
@@ -252,6 +274,9 @@ func (p *ValueTrie) buildMembers(prefix string, includeValues, includeZeroes boo
 
 		var substr string = prefix + string(buf[0:numChars])
 		if includeValues {
+			if child.prefixValue != 0 {
+				substr += string('0' + child.prefixValue)
+			}
 			if child.value != 0 || includeZeroes {
 				substr += string('0' + child.value)
 			}
@@ -291,20 +316,22 @@ func (p *ValueTrie) Size() (sz int) {
 // Return the longest substring of `s` found in the trie.
 func (p *ValueTrie) LongestSubstring(s string) (string, *vector.IntVector) {
 	v := new(vector.IntVector)
-	
+
 	for pos, rune := range s {
 		child, ok := p.children[rune]
 		if !ok {
 			// out of data in the trie -- return what we've got so far
 			return s[0:pos], v
 		}
-	
+
 		// append the value for this node
+		if child.prefixValue != 0 {
+			v.Push(child.prefixValue)
+		}
 		v.Push(child.value)
 		p = child
 	}
-	
+
 	// end of the string -- return input string and whatever values we accumulated
 	return s, v
 }
-
