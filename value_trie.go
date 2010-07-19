@@ -241,7 +241,7 @@ func (p *ValueTrie) getValues(r *strings.Reader, v *vector.IntVector) bool {
 	if !ok {
 		return false
 	}
-	
+
 	// append the value for this node
 	if child.prefixValue != 0 {
 		v.Push(child.prefixValue)
@@ -272,15 +272,20 @@ func (p *ValueTrie) buildMembers(prefix string, includeValues, includeZeroes boo
 		buf := make([]byte, 4)
 		numChars := utf8.EncodeRune(rune, buf)
 
-		var substr string = prefix + string(buf[0:numChars])
+		var substr string
+		// prefix number goes *before* the rune
+		if child.prefixValue != 0 {
+			substr += string('0' + child.prefixValue)
+		}
+		
+		substr = prefix + string(buf[0:numChars])
+		
 		if includeValues {
-			if child.prefixValue != 0 {
-				substr += string('0' + child.prefixValue)
-			}
 			if child.value != 0 || includeZeroes {
 				substr += string('0' + child.value)
 			}
 		}
+		
 		strList.AppendVector(child.buildMembers(substr, includeValues, includeZeroes))
 	}
 
