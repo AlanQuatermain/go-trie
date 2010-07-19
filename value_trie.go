@@ -272,13 +272,14 @@ func (p *ValueTrie) buildMembers(prefix string, includeValues, includeZeroes boo
 		buf := make([]byte, 4)
 		numChars := utf8.EncodeRune(rune, buf)
 
-		var substr string
+		var substr string = prefix
+		
 		// prefix number goes *before* the rune
-		if child.prefixValue != 0 {
+		if includeValues && child.prefixValue != 0 {
 			substr += string('0' + child.prefixValue)
 		}
 		
-		substr = prefix + string(buf[0:numChars])
+		substr += string(buf[0:numChars])
 		
 		if includeValues {
 			if child.value != 0 || includeZeroes {
