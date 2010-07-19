@@ -41,6 +41,11 @@ package trie
 import (
 	"testing"
 	"container/vector"
+	"os"
+	"io"
+	"fmt"
+	"scanner"
+	"utf8"
 )
 
 func checkValues(trie *ValueTrie, sMatch, sCheck string, v *vector.IntVector, t *testing.T) {
@@ -222,7 +227,119 @@ func TestValueTrie(t *testing.T) {
 		t.Errorf("Size of trie after adding '%s' should be %d, was %d", prefixedStr, len(purePrefixedStr),
 			trie.Size())
 	}
-	
+
 	checkValues(trie, `emnix`, ``, values, t)
 	checkValues(trie, `emnix`, `emnixion`, values, t)
+}
+
+//////////////////////////////////////////////////////////////////
+// Benchmarks
+// Run like so:
+//   cat patterns-en.go | gotest -benchmarks=".*"
+// This is because, for some unknown reason, os.Open() always returns 'resource temporarily unavailable'.
+
+func loadPatterns(reader io.Reader) (*ValueTrie, os.Error) {
+	trie := NewValueTrie()
+	var s scanner.Scanner
+	s.Init(reader)
+	s.Mode = scanner.ScanIdents | scanner.ScanRawStrings | scanner.SkipComments
+
+	var which string
+
+	tok := s.Scan()
+	for tok != scanner.EOF {
+		switch tok {
+		case scanner.Ident:
+			// we handle two identifiers: 'patterns' and 'exceptions'
+			switch ident := s.TokenText(); ident {
+			case `patterns`, `exceptions`:
+				which = ident
+			default:
+				return nil, os.ErrorString(fmt.Sprintf("Unrecognized identifier '%s' at position %v",
+					ident, s.Pos()))
+			}
+		case scanner.String, scanner.RawString:
+			// trim the quotes from around the string
+			tokstr := s.TokenText()
+			str := tokstr[1 : len(tokstr)-1]
+
+			switch which {
+			case `patterns`:
+				trie.AddPatternString(str)
+			}
+		}
+		tok = s.Scan()
+	}
+
+	return trie, nil
+}
+
+func setupHyphenTrie() *ValueTrie {
+	/*
+		filename := "patterns-en.go"
+		f, err := os.Open(filename, 0444, os.O_RDONLY)
+		if err != nil {
+			fmt.Printf("Failed to open file '%s': %s\n", filename, err)
+		}
+	*/
+	trie, err := loadPatterns(os.Stdin)
+	if err != nil {
+		fmt.Printf("Failed to load patterns from Stdin: %s\n", err)
+	}
+	return trie
+}
+
+func BenchmarkTraversal(b *testing.B) {
+	b.StopTimer()
+	trie := setupHyphenTrie()
+	if trie == nil {
+		return
+	}
+	b.StartTimer()
+
+	for i := 0; i < b.N; i++ {
+		trie.Members()
+	}
+}
+
+func BenchmarkPatternTraversal(b *testing.B) {
+	b.StopTimer()
+	trie := setupHyphenTrie()
+	if trie == nil {
+		return
+	}
+	b.StartTimer()
+
+	for i := 0; i < b.N; i++ {
+		trie.PatternMembers(true)
+	}
+}
+
+func BenchmarkHyphenationTrie(b *testing.B) {
+	b.StopTimer()
+	trie := setupHyphenTrie()
+	if trie == nil {
+		return
+	}
+	testStr := `.hyphenation.`
+	v := make([]int, utf8.RuneCountInString(testStr))
+	b.StartTimer()
+
+	for i := 0; i < b.N; i++ {
+		vIndex := 0
+		for pos, _ := range testStr {
+			t := testStr[pos:]
+			st, values := trie.LongestSubstring(testStr[pos:])
+			fmt.Println(t, st, *values)
+			vs := v[vIndex:]
+			for i := 0; i < values.Len(); i++ {
+				if values.At(i) > vs[i] {
+					vs[i] = values.At(i)
+				}
+			}
+			vIndex++
+		}
+	}
+
+	fmt.Println(v)
 }
