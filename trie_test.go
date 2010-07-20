@@ -48,42 +48,29 @@ import (
 	"utf8"
 )
 
-func checkValues(trie *ValueTrie, sMatch, sCheck string, v *vector.IntVector, t *testing.T) {
-	var values *vector.IntVector
-	var testStr string = sMatch
-
-	if len(sCheck) == 0 {
-		var ok bool
-		values, ok = trie.ValuesForString(sMatch)
-		if !ok {
-			t.Fatalf("No values returned for string '%s'", sMatch)
-		}
-	} else {
-		var sub string
-		testStr = sCheck
-		sub, values = trie.LongestSubstring(sCheck)
-		if sub != sMatch {
-			t.Fatalf("Longest substring of '%s' should be '%s'", sCheck, sMatch)
-		}
+func checkValues(trie *Trie, s string, v *vector.IntVector, t *testing.T) {
+	value, ok := trie.GetValue(s)
+	values := value.(*vector.IntVector)
+	if !ok {
+		t.Fatalf("No value returned for string '%s'", s)
 	}
 
 	if values.Len() != v.Len() {
-		t.Fatalf("Length mismatch: Values for '%s' should be %v, but got %v", testStr, *v, *values)
+		t.Fatalf("Length mismatch: Values for '%s' should be %v, but got %v", s, *v, *values)
 	}
 	for i := 0; i < values.Len(); i++ {
 		if values.At(i) != v.At(i) {
-			t.Fatalf("Content mismatch: Values for '%s' should be %v, but got %v", testStr, *v, *values)
+			t.Fatalf("Content mismatch: Values for '%s' should be %v, but got %v", s, *v, *values)
 		}
 	}
 }
 
-
 func TestTrie(t *testing.T) {
 	trie := NewTrie()
 
-	trie.Add("hello, world!")
-	trie.Add("hello, there!")
-	trie.Add("this is a sentence.")
+	trie.AddString("hello, world!")
+	trie.AddString("hello, there!")
+	trie.AddString("this is a sentence.")
 
 	if !trie.Contains("hello, world!") {
 		t.Error("trie should contain 'hello, world!'")
@@ -104,7 +91,7 @@ func TestTrie(t *testing.T) {
 	}
 
 	// insert an existing string-- should be no change
-	trie.Add("hello, world!")
+	trie.AddString("hello, world!")
 	if trie.Size() != expectedSize {
 		t.Errorf("trie should still contain only %d nodes after re-adding an existing member string", expectedSize)
 	}
@@ -126,17 +113,45 @@ func TestTrie(t *testing.T) {
 	}
 }
 
-func TestValueTrie(t *testing.T) {
-	trie := NewValueTrie()
+func TestMultiFind(t *testing.T) {
+	trie := NewTrie()
+
+	// these are part of the matches for the word 'hyphenation'
+	trie.AddString(`hyph`)
+	trie.AddString(`hen`)
+	trie.AddString(`hena`)
+	trie.AddString(`henat`)
+
+	expected := new(vector.StringVector)
+	expected.Push(`hyph`)
+	found := trie.AllSubstrings(`hyphenation`)
+	if found.Len() != expected.Len() {
+		t.Errorf("expected %v but found %v", *expected, *found)
+	}
+
+	expected.Cut(0, expected.Len())
+	expected.Push(`hen`)
+	expected.Push(`hena`)
+	expected.Push(`henat`)
+	found = trie.AllSubstrings(`henation`)
+	if found.Len() != expected.Len() {
+		t.Errorf("expected %v but found %v", *expected, *found)
+	}
+}
+
+///////////////////////////////////////////////////////////////
+// Trie tests
+
+func TestTrieValues(t *testing.T) {
+	trie := NewTrie()
 
 	str := "hyphenation"
 	hyp := &vector.IntVector{0, 3, 0, 0, 2, 5, 4, 2, 0, 2, 0}
 
 	hyphStr := "hy3phe2n5a4t2io2n"
-	fullStr := "h0y3p0h0e2n5a4t2i0o2n0"
 
 	// test addition using separate string and vector
-	trie.Add(str, hyp)
+	trie.AddValue(str, hyp)
 	if !trie.Contains(str) {
 		t.Error("value trie should contain the word 'hyphenation'")
 	}
@@ -147,16 +162,6 @@ func TestValueTrie(t *testing.T) {
 
 	if trie.Members().Len() != 1 {
 		t.Error("value trie should have only one member string")
-	}
-
-	shortPat := trie.PatternMembers(false)
-	if shortPat.At(0) != hyphStr {
-		t.Errorf("value trie should contain short pattern string '%s', but found '%s'", hyphStr, shortPat.At(0))
-	}
-
-	longPat := trie.PatternMembers(true)
-	if longPat.At(0) != fullStr {
-		t.Errorf("value trie should contain full pattern string '%s', but found '%s'", fullStr, longPat.At(0))
 	}
 
 	trie.Remove(str)
@@ -183,19 +188,8 @@ func TestValueTrie(t *testing.T) {
 	if mem.At(0) != str {
 		t.Errorf("Expected first member string to be '%s', got '%s'", str, mem.At(0))
 	}
-	shortPat = trie.PatternMembers(false)
-	if shortPat.At(0) != hyphStr {
-		t.Errorf("value trie should contain short pattern string '%s', but found '%s'", hyphStr,
-			shortPat.At(0))
-	}
-	longPat = trie.PatternMembers(true)
-	if longPat.At(0) != fullStr {
-		t.Errorf("value trie should contain full pattern string '%s', but found '%s'", fullStr,
-			longPat.At(0))
-	}
 
-	checkValues(trie, `hyphenation`, ``, hyp, t)
-	checkValues(trie, `hyphenation`, `hyphenationisagreatthing`, hyp, t)
+	checkValues(trie, `hyphenation`, hyp, t)
 
 	trie.Remove(`hyphenation`)
 	if trie.Size() != 0 {
@@ -206,15 +200,14 @@ func TestValueTrie(t *testing.T) {
 	prefixedStr := `5emnix` // this is actually a string from the en_US TeX hyphenation trie
 	purePrefixedStr := `emnix`
 	values := &vector.IntVector{5, 0, 0, 0, 0, 0}
-	trie.Add(purePrefixedStr, values)
+	trie.AddValue(purePrefixedStr, values)
 
 	if trie.Size() != len(purePrefixedStr) {
 		t.Errorf("Size of trie after adding '%s' should be %d, was %d", purePrefixedStr,
 			len(purePrefixedStr), trie.Size())
 	}
 
-	checkValues(trie, `emnix`, ``, values, t)
-	checkValues(trie, `emnix`, `emnixion`, values, t)
+	checkValues(trie, `emnix`, values, t)
 
 	trie.Remove(`emnix`)
 	if trie.Size() != 0 {
@@ -228,8 +221,90 @@ func TestValueTrie(t *testing.T) {
 			trie.Size())
 	}
 
-	checkValues(trie, `emnix`, ``, values, t)
-	checkValues(trie, `emnix`, `emnixion`, values, t)
+	checkValues(trie, `emnix`, values, t)
+}
+
+func TestMultiFindValue(t *testing.T) {
+	trie := NewTrie()
+
+	// these are part of the matches for the word 'hyphenation'
+	trie.AddPatternString(`hy3ph`)
+	trie.AddPatternString(`he2n`)
+	trie.AddPatternString(`hena4`)
+	trie.AddPatternString(`hen5at`)
+
+	v1 := &vector.IntVector{0, 3, 0, 0}
+	v2 := &vector.IntVector{0, 2, 0}
+	v3 := &vector.IntVector{0, 0, 0, 4}
+	v4 := &vector.IntVector{0, 0, 5, 0, 0}
+
+	expectStr := new(vector.StringVector)
+	expectVal := new(vector.Vector) // contains elements of type *vector.IntVector
+
+	expectStr.Push(`hyph`)
+	expectVal.Push(v1)
+	found, values := trie.AllSubstringsAndValues(`hyphenation`)
+	if found.Len() != expectStr.Len() {
+		t.Errorf("expected %v but found %v", *expectStr, *found)
+	}
+	if values.Len() != expectVal.Len() {
+		t.Errorf("Length mismatch: expected %v but found %v", *expectVal, *values)
+	}
+	for i := 0; i < found.Len(); i++ {
+		if found.At(i) != expectStr.At(i) {
+			t.Errorf("Strings content mismatch: expected %v but found %v", *expectStr, *found)
+			break
+		}
+	}
+	for i := 0; i < values.Len(); i++ {
+		ev := expectVal.At(i).(*vector.IntVector)
+		fv := values.At(i).(*vector.IntVector)
+		if ev.Len() != fv.Len() {
+			t.Errorf("Value length mismatch: expected %v but found %v", *ev, *fv)
+			break
+		}
+		for i := 0; i < ev.Len(); i++ {
+			if ev.At(i) != fv.At(i) {
+				t.Errorf("Value mismatch: expected %v but found %v", *ev, *fv)
+				break
+			}
+		}
+	}
+
+	expectStr.Cut(0, expectStr.Len())
+	expectVal.Cut(0, expectVal.Len())
+
+	expectStr.AppendVector(&vector.StringVector{`hen`, `hena`, `henat`})
+	expectVal.Push(v2)
+	expectVal.Push(v3)
+	expectVal.Push(v4)
+	found, values = trie.AllSubstringsAndValues(`henation`)
+	if found.Len() != expectStr.Len() {
+		t.Errorf("expected %v but found %v", *expectStr, *found)
+	}
+	if values.Len() != expectVal.Len() {
+		t.Errorf("Length mismatch: expected %v but found %v", *expectVal, *values)
+	}
+	for i := 0; i < found.Len(); i++ {
+		if found.At(i) != expectStr.At(i) {
+			t.Errorf("Strings content mismatch: expected %v but found %v", *expectStr, *found)
+			break
+		}
+	}
+	for i := 0; i < values.Len(); i++ {
+		ev := expectVal.At(i).(*vector.IntVector)
+		fv := values.At(i).(*vector.IntVector)
+		if ev.Len() != fv.Len() {
+			t.Errorf("Value length mismatch: expected %v but found %v", *ev, *fv)
+			break
+		}
+		for i := 0; i < ev.Len(); i++ {
+			if ev.At(i) != fv.At(i) {
+				t.Errorf("Value mismatch: expected %v but found %v", *ev, *fv)
+				break
+			}
+		}
+	}
 }
 
 //////////////////////////////////////////////////////////////////
@@ -238,8 +313,8 @@ func TestValueTrie(t *testing.T) {
 //   cat patterns-en.go | gotest -benchmarks=".*"
 // This is because, for some unknown reason, os.Open() always returns 'resource temporarily unavailable'.
 
-func loadPatterns(reader io.Reader) (*ValueTrie, os.Error) {
-	trie := NewValueTrie()
+func loadPatterns(reader io.Reader) (*Trie, os.Error) {
+	trie := NewTrie()
 	var s scanner.Scanner
 	s.Init(reader)
 	s.Mode = scanner.ScanIdents | scanner.ScanRawStrings | scanner.SkipComments
@@ -274,7 +349,9 @@ func loadPatterns(reader io.Reader) (*ValueTrie, os.Error) {
 	return trie, nil
 }
 
-func setupHyphenTrie() *ValueTrie {
+var benchmarkTrie *Trie = nil
+
+func setupTrie() *Trie {
 	/*
 		filename := "patterns-en.go"
 		f, err := os.Open(filename, 0444, os.O_RDONLY)
@@ -282,16 +359,19 @@ func setupHyphenTrie() *ValueTrie {
 			fmt.Printf("Failed to open file '%s': %s\n", filename, err)
 		}
 	*/
-	trie, err := loadPatterns(os.Stdin)
-	if err != nil {
-		fmt.Printf("Failed to load patterns from Stdin: %s\n", err)
+	if benchmarkTrie == nil {
+		var err os.Error
+		benchmarkTrie, err = loadPatterns(os.Stdin)
+		if err != nil {
+			fmt.Printf("Failed to load patterns from Stdin: %s\n", err)
+		}
 	}
-	return trie
+	return benchmarkTrie
 }
 
 func BenchmarkTraversal(b *testing.B) {
 	b.StopTimer()
-	trie := setupHyphenTrie()
+	trie := setupTrie()
 	if trie == nil {
 		return
 	}
@@ -302,22 +382,9 @@ func BenchmarkTraversal(b *testing.B) {
 	}
 }
 
-func BenchmarkPatternTraversal(b *testing.B) {
+func BenchmarkHyphenation(b *testing.B) {
 	b.StopTimer()
-	trie := setupHyphenTrie()
-	if trie == nil {
-		return
-	}
-	b.StartTimer()
-
-	for i := 0; i < b.N; i++ {
-		trie.PatternMembers(true)
-	}
-}
-
-func BenchmarkHyphenationTrie(b *testing.B) {
-	b.StopTimer()
-	trie := setupHyphenTrie()
+	trie := setupTrie()
 	if trie == nil {
 		return
 	}
@@ -326,20 +393,27 @@ func BenchmarkHyphenationTrie(b *testing.B) {
 	b.StartTimer()
 
 	for i := 0; i < b.N; i++ {
+		for i := 0; i < len(v); i++ {
+			v[i] = 0
+		}
 		vIndex := 0
 		for pos, _ := range testStr {
 			t := testStr[pos:]
-			st, values := trie.LongestSubstring(testStr[pos:])
-			fmt.Println(t, st, *values)
-			vs := v[vIndex:]
+			strs, values := trie.AllSubstringsAndValues(t)
 			for i := 0; i < values.Len(); i++ {
-				if values.At(i) > vs[i] {
-					vs[i] = values.At(i)
+				str := strs.At(i)
+				val := values.At(i).(*vector.IntVector)
+
+				diff := val.Len() - len(str)
+				vs := v[vIndex-diff:]
+
+				for i := 0; i < val.Len(); i++ {
+					if val.At(i) > vs[i] {
+						vs[i] = val.At(i)
+					}
 				}
 			}
 			vIndex++
 		}
 	}
-
-	fmt.Println(v)
 }

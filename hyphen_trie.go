@@ -1,5 +1,5 @@
 /*
- * defs.go
+ * trie.go
  * Trie
  *
  * Created by Jim Dovey on 16/07/2010.
@@ -36,27 +36,66 @@
  *
  */
 
-/*
-	The trie package implements a basic character trie type. Instead of using bytes however, it uses
-	integer-sized runes as traversal keys.  In Go, this means that each node refers to exactly one Unicode
-	character, so the implementation doesn't depend on the particular semantics of UTF-8 byte streams.
-
-	There is an additional specialization, which stores an integer value along with the Unicode character
-	on each node.  This is to implement TeX-style hyphenation pattern storage.
-*/
 package trie
 
-// The basic form of a Trie uses runes rather than characters, therefore it works on integer types.
-type Trie struct {
-	leaf     bool          // whether the node is a leaf (the end of an input string).
-	children map[int]*Trie // a map of sub-tries for each child rune value.
-}
+import (
+	"unicode"
+	"utf8"
+	"container/vector"
+	"strings"
+)
 
-// The second form stores a rune:integer pair.  This is used in the implementation of TeX hyphenation
-// pattern tries.
-type ValueTrie struct {
-	value       int                // the value for the letter which indexed this node.
-	prefixValue int                // some hyphenation strings *begin* with a numeric value. Le sigh.
-	leaf        bool               // whether the node is a leaf (where an input string ended).
-	children    map[int]*ValueTrie // a map of sub-tries for each child rune value.
+
+// Specialized function for TeX-style hyphenation patterns.  Accepts strings of the form '.hy2p'.
+// The value it stores is of type vector.IntVector
+func (p *Trie) AddPatternString(s string) {
+	v := new(vector.IntVector)
+
+	// precompute the Unicode rune for the character '0'
+	rune0, _ := utf8.DecodeRune([]byte{'0'})
+
+	strLen := len(s)
+
+	// Using the range keyword will give us each Unicode rune.
+	for pos, rune := range s {
+		if unicode.IsDigit(rune) {
+			if pos == 0 {
+				// This is a prefix number
+				v.Push(rune - rune0)
+			}
+
+			// this is a number referring to the previous character, and has
+			// already been handled
+			continue
+		}
+
+		if pos < strLen-1 {
+			// look ahead to see if it's followed by a number
+			next := int(s[pos+1])
+			if unicode.IsDigit(next) {
+				// next char is the hyphenation value for this char
+				v.Push(next - rune0)
+			} else {
+				// hyphenation for this char is an implied zero
+				v.Push(0)
+			}
+		} else {
+			// last character gets an implied zero
+			v.Push(0)
+		}
+	}
+
+	pure := strings.Map(func(rune int) int {
+		if unicode.IsDigit(rune) {
+			return -1
+		}
+		return rune
+	},
+		s)
+	leaf := p.addRunes(strings.NewReader(pure))
+	if leaf == nil {
+		return
+	}
+
+	leaf.value = v
 }
