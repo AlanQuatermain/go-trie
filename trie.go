@@ -47,17 +47,16 @@
 package trie
 
 import (
-	"strings"
-	"container/vector"
-	"utf8"
 	"sort"
+	"strings"
+	"unicode/utf8"
 )
 
 // A Trie uses runes rather than characters for indexing, therefore its child key values are integers.
 type Trie struct {
-	leaf     bool          // whether the node is a leaf (the end of an input string).
-	value    interface{}   // the value associated with the string up to this leaf node.
-	children map[int]*Trie // a map of sub-tries for each child rune value.
+	leaf     bool           // whether the node is a leaf (the end of an input string).
+	value    interface{}    // the value associated with the string up to this leaf node.
+	children map[rune]*Trie // a map of sub-tries for each child rune value.
 }
 
 // Creates and returns a new Trie instance.
@@ -65,23 +64,23 @@ func NewTrie() *Trie {
 	t := new(Trie)
 	t.leaf = false
 	t.value = nil
-	t.children = make(map[int]*Trie)
+	t.children = make(map[rune]*Trie)
 	return t
 }
 
 // Internal function: adds items to the trie, reading runes from a strings.Reader.  It returns
 // the leaf node at which the addition ends.
 func (p *Trie) addRunes(r *strings.Reader) *Trie {
-	rune, _, err := r.ReadRune()
+	rune2, _, err := r.ReadRune()
 	if err != nil {
 		p.leaf = true
 		return p
 	}
 
-	n := p.children[rune]
+	n := p.children[rune2]
 	if n == nil {
 		n = NewTrie()
-		p.children[rune] = n
+		p.children[rune2] = n
 	}
 
 	// recurse to store sub-runes below the new node
@@ -112,7 +111,7 @@ func (p *Trie) AddValue(s string, v interface{}) {
 
 // Internal string removal function.  Returns true if this node is empty following the removal.
 func (p *Trie) removeRunes(r *strings.Reader) bool {
-	rune, _, err := r.ReadRune()
+	rune2, _, err := r.ReadRune()
 	if err != nil {
 		// remove value, remove leaf flag
 		p.value = nil
@@ -120,10 +119,10 @@ func (p *Trie) removeRunes(r *strings.Reader) bool {
 		return len(p.children) == 0
 	}
 
-	child, ok := p.children[rune]
+	child, ok := p.children[rune2]
 	if ok && child.removeRunes(r) {
 		// the child is now empty following the removal, so prune it
-		p.children[rune] = nil, false
+		delete(p.children, rune2)
 	}
 
 	return len(p.children) == 0
@@ -141,7 +140,7 @@ func (p *Trie) Remove(s string) bool {
 
 // Internal string inclusion function.
 func (p *Trie) includes(r *strings.Reader) *Trie {
-	rune, _, err := r.ReadRune()
+	rune2, _, err := r.ReadRune()
 	if err != nil {
 		if p.leaf {
 			return p
@@ -149,7 +148,7 @@ func (p *Trie) includes(r *strings.Reader) *Trie {
 		return nil
 	}
 
-	child, ok := p.children[rune]
+	child, ok := p.children[rune2]
 	if !ok {
 		return nil // no node for this rune was in the trie
 	}
@@ -181,27 +180,26 @@ func (p *Trie) GetValue(s string) (interface{}, bool) {
 }
 
 // Internal output-building function used by Members()
-func (p *Trie) buildMembers(prefix string) *vector.StringVector {
-	strList := new(vector.StringVector)
+func (p *Trie) buildMembers(prefix string) (strList []string) {
 
 	if p.leaf {
-		strList.Push(prefix)
+		strList = append(strList, prefix)
 	}
 
 	// for each child, go grab all suffixes
-	for rune, child := range p.children {
+	for r, child := range p.children {
 		buf := make([]byte, 4)
-		numChars := utf8.EncodeRune(rune, buf)
-		strList.AppendVector(child.buildMembers(prefix + string(buf[0:numChars])))
+		numChars := utf8.EncodeRune(buf, r)
+		strList = append(strList, child.buildMembers(prefix+string(buf[0:numChars]))...)
 	}
 
-	return strList
+	return
 }
 
 // Retrieves all member strings, in order.
-func (p *Trie) Members() (members *vector.StringVector) {
+func (p *Trie) Members() (members []string) {
 	members = p.buildMembers(``)
-	sort.Sort(members)
+	sort.Strings(members)
 	return
 }
 
@@ -217,11 +215,9 @@ func (p *Trie) Size() (sz int) {
 }
 
 // Return all anchored substrings of the given string within the Trie.
-func (p *Trie) AllSubstrings(s string) *vector.StringVector {
-	v := new(vector.StringVector)
-
-	for pos, rune := range s {
-		child, ok := p.children[rune]
+func (p *Trie) AllSubstrings(s string) (v []string) {
+	for pos, r := range s {
+		child, ok := p.children[r]
 		if !ok {
 			// return whatever we have so far
 			break
@@ -229,7 +225,7 @@ func (p *Trie) AllSubstrings(s string) *vector.StringVector {
 
 		// if this is a leaf node, add the string so far to the output vector
 		if child.leaf {
-			v.Push(s[0:pos])
+			v = append(v, s[0:pos])
 		}
 
 		p = child
@@ -240,26 +236,22 @@ func (p *Trie) AllSubstrings(s string) *vector.StringVector {
 
 // Return all anchored substrings of the given string within the Trie, with a matching set of
 // their associated values.
-func (p *Trie) AllSubstringsAndValues(s string) (*vector.StringVector, *vector.Vector) {
-	sv := new(vector.StringVector)
-	vv := new(vector.Vector)
-	
+func (p *Trie) AllSubstringsAndValues(s string) (sv []string, vv []interface{}) {
 	for pos, rune := range s {
 		child, ok := p.children[rune]
 		if !ok {
 			// return whatever we have so far
 			break
 		}
-		
+
 		// if this is a leaf node, add the string so far and its value
 		if child.leaf {
-			sv.Push(s[0:pos+utf8.RuneLen(rune)])
-			vv.Push(child.value)
+			sv = append(sv, s[0:pos+utf8.RuneLen(rune)])
+			vv = append(vv, child.value)
 		}
-		
+
 		p = child
 	}
-	
+
 	return sv, vv
 }
-
