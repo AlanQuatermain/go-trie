@@ -39,17 +39,14 @@
 package trie
 
 import (
-	"unicode"
-	"utf8"
-	"container/vector"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
-
 // Specialized function for TeX-style hyphenation patterns.  Accepts strings of the form '.hy2p'.
-// The value it stores is of type vector.IntVector
 func (p *Trie) AddPatternString(s string) {
-	v := new(vector.IntVector)
+	v := []rune{}
 
 	// precompute the Unicode rune for the character '0'
 	rune0, _ := utf8.DecodeRune([]byte{'0'})
@@ -57,11 +54,11 @@ func (p *Trie) AddPatternString(s string) {
 	strLen := len(s)
 
 	// Using the range keyword will give us each Unicode rune.
-	for pos, rune := range s {
-		if unicode.IsDigit(rune) {
+	for pos, r := range s {
+		if unicode.IsDigit(r) {
 			if pos == 0 {
 				// This is a prefix number
-				v.Push(rune - rune0)
+				v = append(v, rune0)
 			}
 
 			// this is a number referring to the previous character, and has
@@ -71,25 +68,25 @@ func (p *Trie) AddPatternString(s string) {
 
 		if pos < strLen-1 {
 			// look ahead to see if it's followed by a number
-			next := int(s[pos+1])
+			next := rune(s[pos+1])
 			if unicode.IsDigit(next) {
 				// next char is the hyphenation value for this char
-				v.Push(next - rune0)
+				v = append(v, next-rune0)
 			} else {
 				// hyphenation for this char is an implied zero
-				v.Push(0)
+				v = append(v, 0)
 			}
 		} else {
 			// last character gets an implied zero
-			v.Push(0)
+			v = append(v, 0)
 		}
 	}
 
-	pure := strings.Map(func(rune int) int {
-		if unicode.IsDigit(rune) {
+	pure := strings.Map(func(r rune) rune {
+		if unicode.IsDigit(r) {
 			return -1
 		}
-		return rune
+		return r
 	},
 		s)
 	leaf := p.addRunes(strings.NewReader(pure))
